@@ -1,0 +1,12 @@
+*.o
+app
+*.ttf
+/.vscode
+
+*.a
+*.so
+*.dylib
+*.exe
+*.out
+build/
+bin/

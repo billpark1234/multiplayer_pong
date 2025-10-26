@@ -1,0 +1,1 @@
+You need to install SFML 2.6.2 and have LiberationSans-Regular.ttf in the root directory

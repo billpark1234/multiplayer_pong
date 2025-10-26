@@ -1,7 +1,10 @@
 *.o
 app
+server
+client
 *.ttf
 /.vscode
+*.txt
 
 *.a
 *.so

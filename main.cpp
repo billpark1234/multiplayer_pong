@@ -133,6 +133,8 @@ void run()
     sf::RectangleShape player2(sf::Vector2f(20.0f, 100.0f));
     player2.setPosition(780, 0);
 
+    bool inFocus = false;
+
     while (window.isOpen())
     {
         sf::Event event;
@@ -140,21 +142,32 @@ void run()
         {
             if (event.type == sf::Event::Closed)
                 window.close();
+            else if (event.type == sf::Event::GainedFocus)
+            {
+                inFocus = true;
+            }
+            else if (event.type == sf::Event::LostFocus)
+            {
+                inFocus = false;
+            }
         }
 
         ball.move(velocity);
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W))
-            player1.move(0.0f, -player_speed);
+        if (inFocus)
+        {
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W))
+                player1.move(0.0f, -player_speed);
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
-            player1.move(0.0f, player_speed);
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
+                player1.move(0.0f, player_speed);
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
-            player2.move(0.0f, -player_speed);
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+                player2.move(0.0f, -player_speed);
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
-            player2.move(0.0f, player_speed);
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+                player2.move(0.0f, player_speed);
+        }
 
         const sf::Vector2f &pos = ball.getPosition();
 

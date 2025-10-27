@@ -1,7 +1,18 @@
 #include <SFML/Network.hpp>
+#include <SFML/Graphics.hpp>
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <thread>
+#include <chrono>
+#include "common.hpp"
+
+/** Overloading so that we can send vector packet */
+sf::Packet &operator>>(sf::Packet &packet, Positions &m)
+{
+    packet >> m.ball_pos.x >> m.ball_pos.y >> m.p1_pos.x >> m.p1_pos.y >> m.p2_pos.x >> m.p2_pos.y;
+    return packet;
+}
 
 int main()
 {
@@ -41,7 +52,7 @@ int main()
     // std::cout << server_ip << std::endl;
     // std::cout << port << std::endl;
 
-    /* Socket stuff begins here */
+    /* Connect to the server */
     sf::TcpSocket socket;
     sf::Socket::Status status = socket.connect(server_ip, port);
     if (status != sf::Socket::Done)
@@ -50,11 +61,76 @@ int main()
         return EXIT_FAILURE;
     }
 
-    char data[6] = "hello";
-
-    if (socket.send(data, 6 * sizeof(char)) != sf::Socket::Done)
+    /* Game starts here: */
+    sf::Font font;
+    if (!font.loadFromFile("LiberationSans-Regular.ttf"))
     {
-        std::cerr << "Failed to send to server";
-        return EXIT_FAILURE;
+        throw std::runtime_error("File not found: LiberationSans-Regular.ttf");
+    }
+
+    sf::RenderWindow window(sf::VideoMode(800, 400), "Hello From SFML");
+    window.setFramerateLimit(60);
+
+    int p1score = 0;
+    int p2score = 0;
+
+    sf::Text p1text;
+    p1text.setFont(font);
+    p1text.setString(std::to_string(p1score));
+    p1text.setPosition(200.0f, 0.0f);
+    p1text.setCharacterSize(24);
+    p1text.setFillColor(sf::Color::White);
+
+    sf::Text p2text;
+    p2text.setFont(font);
+    p2text.setString(std::to_string(p2score));
+    p2text.setPosition(600.0f, 0.0f);
+    p2text.setCharacterSize(24);
+    p2text.setFillColor(sf::Color::White);
+
+    sf::CircleShape ball(15.f);
+    ball.setOrigin(15.0f, 15.0f);
+    sf::RectangleShape player1(sf::Vector2f(20.0f, 100.0f));
+    sf::RectangleShape player2(sf::Vector2f(20.0f, 100.0f));
+
+    bool inFocus = true;
+
+    sf::Packet packet;
+    Positions positions;
+
+    while (window.isOpen())
+    {
+        sf::Event event;
+        while (window.pollEvent(event))
+        {
+            if (event.type == sf::Event::Closed)
+                window.close();
+            else if (event.type == sf::Event::GainedFocus)
+            {
+                inFocus = true;
+            }
+            else if (event.type == sf::Event::LostFocus)
+            {
+                inFocus = false;
+            }
+        }
+
+        packet.clear();
+        if (socket.receive(packet) == sf::Socket::Done)
+        {
+            packet >> positions;
+        }
+
+        ball.setPosition(positions.ball_pos);
+        player1.setPosition(positions.p1_pos);
+        player2.setPosition(positions.p2_pos);
+
+        window.clear();
+        window.draw(ball);
+        window.draw(player1);
+        window.draw(player2);
+        window.draw(p1text);
+        window.draw(p2text);
+        window.display();
     }
 }

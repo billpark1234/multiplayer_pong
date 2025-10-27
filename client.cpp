@@ -16,7 +16,7 @@ sf::Packet &operator>>(sf::Packet &packet, Positions &m)
 
 int main()
 {
-    /* Parsing config stuff */
+    // Parsing config stuff
     std::string config = "config.txt";
     std::ifstream istrm(config, std::ios::binary);
     if (!istrm.is_open())
@@ -52,7 +52,7 @@ int main()
     // std::cout << server_ip << std::endl;
     // std::cout << port << std::endl;
 
-    /* Connect to the server */
+    // Connect to the server
     sf::TcpSocket socket;
     sf::Socket::Status status = socket.connect(server_ip, port);
     if (status != sf::Socket::Done)
@@ -60,8 +60,9 @@ int main()
         std::cerr << "Failed to connect to server";
         return EXIT_FAILURE;
     }
+    socket.setBlocking(false);
 
-    /* Game starts here: */
+    // Game starts here:
     sf::Font font;
     if (!font.loadFromFile("LiberationSans-Regular.ttf"))
     {
@@ -95,8 +96,10 @@ int main()
 
     bool inFocus = true;
 
-    sf::Packet packet;
+    sf::Packet send_packet;
+    sf::Packet receive_packet;
     Positions positions;
+    int move = 0;
 
     while (window.isOpen())
     {
@@ -106,24 +109,32 @@ int main()
             if (event.type == sf::Event::Closed)
                 window.close();
             else if (event.type == sf::Event::GainedFocus)
-            {
                 inFocus = true;
-            }
             else if (event.type == sf::Event::LostFocus)
-            {
                 inFocus = false;
-            }
         }
 
-        packet.clear();
-        if (socket.receive(packet) == sf::Socket::Done)
+        move = 0;
+        if (inFocus)
         {
-            packet >> positions;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+                move = -1;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+                move = 1;
         }
 
-        ball.setPosition(positions.ball_pos);
-        player1.setPosition(positions.p1_pos);
-        player2.setPosition(positions.p2_pos);
+        if (socket.receive(receive_packet) == sf::Socket::Done)
+        {
+            receive_packet >> positions;
+            ball.setPosition(positions.ball_pos);
+            player1.setPosition(positions.p1_pos);
+            player2.setPosition(positions.p2_pos);
+            receive_packet.clear();
+        }
+
+        send_packet.clear();
+        send_packet << move;
+        sf::Socket::Status status = socket.send(send_packet);
 
         window.clear();
         window.draw(ball);

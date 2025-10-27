@@ -115,8 +115,8 @@ int main()
     sf::RectangleShape player1(sf::Vector2f(20.0f, 100.0f));
     sf::RectangleShape player2(sf::Vector2f(20.0f, 100.0f));
     player2.setPosition(780, 0);
-    int p1move; // 0-no move. 1-up. -1=down.
-    int p2move;
+    int p1move = 0; // 0-no move. -1-up. 1=down.
+    int p2move = 0;
 
     Positions positions;
     sf::Packet send_packet;
@@ -124,15 +124,8 @@ int main()
 
     while (running)
     {
-        send_packet.clear();
-        positions.ball_pos = ball.getPosition();
-        positions.p1_pos = player1.getPosition();
-        positions.p2_pos = player2.getPosition();
-        send_packet << positions;
-
-        client1.send(send_packet);
         /* receive data */
-        if (selector.wait(sf::milliseconds(16)))
+        if (selector.wait())
         {
             if (selector.isReady(client1))
             {
@@ -147,14 +140,16 @@ int main()
                 else if (status == sf::Socket::Done)
                 {
                     receive_packet >> p1move;
+                    receive_packet.clear();
                 }
             }
         }
 
         /* game logic below */
+        std::cout << p1move << std::endl;
 
         ball.move(velocity);
-        // player1.move(0.0f, player_speed * p1move * -1);
+        player1.move(0.0f, player_speed * p1move);
 
         const sf::Vector2f &pos = ball.getPosition();
 
@@ -190,6 +185,14 @@ int main()
 
         if (collision_p1 == 3 || collision_p2 == 3)
             velocity = get_reflection(velocity, sf::Vector2f(0.0f, 1.0f));
+
+        send_packet.clear();
+        positions.ball_pos = ball.getPosition();
+        positions.p1_pos = player1.getPosition();
+        positions.p2_pos = player2.getPosition();
+        send_packet << positions;
+
+        client1.send(send_packet);
     }
 
     listener.close();

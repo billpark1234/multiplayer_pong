@@ -5,14 +5,6 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include "common.hpp"
-
-/** Overloading so that we can send vector packet */
-sf::Packet &operator>>(sf::Packet &packet, Positions &m)
-{
-    packet >> m.ball_pos.x >> m.ball_pos.y >> m.p1_pos.x >> m.p1_pos.y >> m.p2_pos.x >> m.p2_pos.y;
-    return packet;
-}
 
 int main()
 {
@@ -48,19 +40,22 @@ int main()
                 port = std::stoi(value);
         }
     }
+    istrm.close();
 
     // std::cout << server_ip << std::endl;
     // std::cout << port << std::endl;
 
     // Connect to the server
     sf::TcpSocket socket;
-    sf::Socket::Status status = socket.connect(server_ip, port);
+    sf::Socket::Status status;
+
+    status = socket.connect(server_ip, port);
     if (status != sf::Socket::Done)
     {
         std::cerr << "Failed to connect to server";
         return EXIT_FAILURE;
     }
-    socket.setBlocking(false);
+    socket.setBlocking(false); // important
 
     // Game starts here:
     sf::Font font;
@@ -98,7 +93,6 @@ int main()
 
     sf::Packet send_packet;
     sf::Packet receive_packet;
-    Positions positions;
     int move = 0;
 
     while (window.isOpen())
@@ -115,26 +109,39 @@ int main()
         }
 
         move = 0;
+        send_packet.clear();
         if (inFocus)
         {
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+            {
                 move = -1;
+                send_packet << move;
+                socket.send(send_packet);
+                std::cout << "sent" << std::endl;
+            }
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+            {
                 move = 1;
+                send_packet << move;
+                socket.send(send_packet);
+                std::cout << "sent" << std::endl;
+            }
         }
 
-        if (socket.receive(receive_packet) == sf::Socket::Done)
+        status = socket.receive(receive_packet);
+        float bx, by, p1x, p1y, p2x, p2y;
+        if (status == sf::Socket::Done)
         {
-            receive_packet >> positions;
-            ball.setPosition(positions.ball_pos);
-            player1.setPosition(positions.p1_pos);
-            player2.setPosition(positions.p2_pos);
+            receive_packet >> bx >> by >> p1x >> p1y >> p2x >> p2y;
+            ball.setPosition(bx, by);
+            player1.setPosition(p1x, p1y);
+            player2.setPosition(p2x, p2y);
             receive_packet.clear();
         }
-
-        send_packet.clear();
-        send_packet << move;
-        sf::Socket::Status status = socket.send(send_packet);
+        else if (status == sf::Socket::Disconnected)
+        {
+            window.close();
+        }
 
         window.clear();
         window.draw(ball);

@@ -1,25 +1,44 @@
 #include <SFML/Network.hpp>
-#include <SFML/Graphics.hpp>
 #include <cmath>
 #include <iostream>
-#include "common.hpp"
+#include <thread>
+#include <atomic>
 
-/** Overloading so that we can receive vector packet */
-sf::Packet &operator<<(sf::Packet &packet, Positions &m)
+struct Ball
 {
-    packet << m.ball_pos.x << m.ball_pos.y << m.p1_pos.x << m.p1_pos.y << m.p2_pos.x << m.p2_pos.y;
-    return packet;
-}
+    float radius;
+    float x, y, vx, vy;
+    void move()
+    {
+        x += vx;
+        y += vy;
+    };
+    void setPos(float x, float y)
+    {
+        this->x = x;
+        this->y = y;
+    }
+};
 
-int is_colliding(const sf::RectangleShape &rect, const sf::CircleShape &circ)
+struct Paddle
 {
-    float cx = circ.getPosition().x;
-    float cy = circ.getPosition().y;
-    float rx = rect.getPosition().x;
-    float ry = rect.getPosition().y;
-    float rw = rect.getSize().x;
-    float rh = rect.getSize().y;
-    float radius = circ.getRadius();
+    float width, height, x, y;
+    void move(float dx, float dy)
+    {
+        x += dx;
+        y += dy;
+    }
+};
+
+int is_colliding(Paddle &rect, Ball &ball)
+{
+    float cx = ball.x;
+    float cy = ball.y;
+    float rx = rect.x;
+    float ry = rect.y;
+    float rw = rect.width;
+    float rh = rect.height;
+    float radius = ball.radius;
 
     float testX = cx;
     float testY = cy;
@@ -51,18 +70,9 @@ int is_colliding(const sf::RectangleShape &rect, const sf::CircleShape &circ)
     return -1;
 }
 
-inline float dot(const sf::Vector2f &u, const sf::Vector2f &v)
-{
-    return u.x * v.x + u.y * v.y;
-}
-
-inline sf::Vector2f get_reflection(const sf::Vector2f &incoming, const sf::Vector2f &normal)
-{
-    return incoming - ((2 * dot(incoming, normal)) * normal);
-}
-
 int main()
 {
+    sf::Socket::Status status;
     sf::TcpListener listener;
 
     if (listener.listen(5000) != sf::Socket::Done)
@@ -71,25 +81,18 @@ int main()
         return EXIT_FAILURE;
     }
 
-    // accept blocks, meaning the server will pause execution until both
-    // clients are connected.
     sf::TcpSocket client1;
     if (listener.accept(client1) != sf::Socket::Done)
     {
-        std::cerr << "Accept failed for client1";
+        std::cerr << "Accept failed for client2";
         return EXIT_FAILURE;
     }
-
     // sf::TcpSocket client2;
     // if (listener.accept(client2) != sf::Socket::Done)
     // {
     //     std::cerr << "Accept failed for client2";
     //     return EXIT_FAILURE;
     // }
-
-    sf::SocketSelector selector;
-    selector.add(client1);
-    // selector.add(client2);
 
     bool running = true;
     constexpr int window_width = 800;
@@ -99,100 +102,60 @@ int main()
     int p1score = 0;
     int p2score = 0;
 
-    /** Since shape is used for both drawing and physics, I use graphics module
-     * on both client and server.
-     */
+    Ball ball{15.0f, window_width / 2, window_height / 2, 1.0f, 1.0f};
+    Paddle p1{20.0f, 100.0f, 0.0f, 0.0f};
+    Paddle p2{20.0f, 100.0f, 780.0f, 0.0f};
 
-    sf::CircleShape ball(15.f);
-    ball.setOrigin(15.0f, 15.0f);
-    ball.setPosition(window_width / 2, window_height / 2);
-    const float radius = ball.getRadius();
-
-    sf::Vector2f velocity(0.0f, 0.0f);
-    velocity.x = 1.0f;
-    velocity.y = 1.0f;
-
-    sf::RectangleShape player1(sf::Vector2f(20.0f, 100.0f));
-    sf::RectangleShape player2(sf::Vector2f(20.0f, 100.0f));
-    player2.setPosition(780, 0);
-    int p1move = 0; // 0-no move. -1-up. 1=down.
-    int p2move = 0;
-
-    Positions positions;
+    sf::SocketSelector selector;
     sf::Packet send_packet;
-    sf::Packet receive_packet;
+    selector.add(client1);
 
+    // Moving ball and sending packets to the clients
     while (running)
     {
-        /* receive data */
-        if (selector.wait())
-        {
-            if (selector.isReady(client1))
-            {
-                // std::cout << "ready" << std::endl;
-                sf::Socket::Status status = client1.receive(receive_packet);
-                if (status == sf::Socket::Disconnected)
-                {
-                    std::cout << "Disconnected" << std::endl;
-                    selector.remove(client1);
-                    running = false;
-                }
-                else if (status == sf::Socket::Done)
-                {
-                    receive_packet >> p1move;
-                    receive_packet.clear();
-                }
-            }
-        }
+        ball.move();
+        p1.move(0.0f, 0.0f);
 
-        /* game logic below */
-        std::cout << p1move << std::endl;
-
-        ball.move(velocity);
-        player1.move(0.0f, player_speed * p1move);
-
-        const sf::Vector2f &pos = ball.getPosition();
-
-        if (pos.x + radius < 0) // we count score if ball completely disappears.
+        if (ball.x + ball.radius < 0) // we count score if ball completely disappears.
         {
             p2score++;
-            ball.setPosition(window_width / 2, window_height / 2);
+            ball.setPos(window_width / 2, window_height / 2);
         }
 
-        if (pos.x - radius >= window_width)
+        if (ball.x - ball.radius >= window_width)
         {
             p1score++;
-            ball.setPosition(window_width / 2, window_height / 2);
+            ball.setPos(window_width / 2, window_height / 2);
         }
 
-        if (pos.y + radius >= window_height) // Bottom wall
-            velocity = get_reflection(velocity, sf::Vector2f(0.0f, -1.0f));
+        if (ball.y + ball.radius >= window_height || ball.y - ball.radius < 0) // Bottom wall
+            ball.vy = -ball.vy;
 
-        if (pos.y - radius < 0) // Top wall
-            velocity = get_reflection(velocity, sf::Vector2f(0.0f, 1.0f));
-
-        int collision_p1 = is_colliding(player1, ball);
-        int collision_p2 = is_colliding(player2, ball);
+        int collision_p1 = is_colliding(p1, ball);
+        int collision_p2 = is_colliding(p2, ball);
 
         if (collision_p1 == 0 || collision_p2 == 0)
-            velocity = get_reflection(velocity, sf::Vector2f(-1.0f, 0.0f));
+            ball.vx = -ball.vx;
 
         if (collision_p1 == 1 || collision_p2 == 1)
-            velocity = get_reflection(velocity, sf::Vector2f(0.0f, -1.0f));
+            ball.vy = -ball.vy;
 
         if (collision_p1 == 2 || collision_p2 == 2)
-            velocity = get_reflection(velocity, sf::Vector2f(1.0f, 0.0f));
+            ball.vx = -ball.vx;
 
         if (collision_p1 == 3 || collision_p2 == 3)
-            velocity = get_reflection(velocity, sf::Vector2f(0.0f, 1.0f));
+            ball.vy = -ball.vy;
 
+        // Send positions
         send_packet.clear();
-        positions.ball_pos = ball.getPosition();
-        positions.p1_pos = player1.getPosition();
-        positions.p2_pos = player2.getPosition();
-        send_packet << positions;
+        send_packet << ball.x << ball.y << p1.x << p1.y << p2.x << p2.y;
 
-        client1.send(send_packet);
+        status = client1.send(send_packet);
+        if (status == sf::Socket::Disconnected)
+        {
+            running = false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
     listener.close();
